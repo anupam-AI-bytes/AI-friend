@@ -1,6 +1,7 @@
 import os
 import time
 from utils.notes_generator import build_notes_prompt
+from utils.mcq_generator import build_mcq_prompt
 import streamlit as st
 from dotenv import load_dotenv
 from google import genai
@@ -38,6 +39,11 @@ if "messages" not in st.session_state:
 
 if "study_mode" not in st.session_state:
     st.session_state.study_mode = "General AI"
+
+# Store generated MCQs
+
+if "generated_mcqs" not in st.session_state:
+    st.session_state.generated_mcqs = ""
     
 if "generate_notes" not in st.session_state:
     st.session_state.generate_notes = False
@@ -126,6 +132,29 @@ if st.button("📝 Generate Notes", use_container_width=True):
         st.session_state.generate_notes = True
 
     st.divider()
+
+if st.button("📚 Generate MCQs", use_container_width=True):
+
+    if st.session_state.pdf_text == "":
+
+        st.warning("⚠ Please upload a PDF first.")
+
+    else:
+
+        with st.spinner("Generating MCQs..."):
+
+            prompt = build_mcq_prompt(
+                st.session_state.pdf_text
+            )
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+
+            st.session_state.generated_mcqs = response.text
+
+        st.success("✅ MCQs generated successfully!")
 
     if st.button("🗑 Clear Chat", use_container_width=True):
 
@@ -404,6 +433,17 @@ if st.session_state.generate_notes:
     )
 
     st.session_state.generate_notes = False
+# =====================================================
+# Display Generated MCQs
+# =====================================================
+
+if st.session_state.generated_mcqs != "":
+
+    st.divider()
+
+    st.subheader("📚 AI Generated MCQs")
+
+    st.markdown(st.session_state.generated_mcqs)
 
 # =====================================================
 # Footer
