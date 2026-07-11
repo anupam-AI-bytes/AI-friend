@@ -1,8 +1,11 @@
 import os
+import time
+from utils.notes_generator import build_notes_prompt
 import streamlit as st
 from dotenv import load_dotenv
 from google import genai
 from prompts import PROMPTS
+from utils.pdf_reader import extract_text_from_pdf
 
 # =====================================================
 # Load Environment Variables
@@ -35,6 +38,15 @@ if "messages" not in st.session_state:
 
 if "study_mode" not in st.session_state:
     st.session_state.study_mode = "General AI"
+    
+if "generate_notes" not in st.session_state:
+    st.session_state.generate_notes = False
+
+if "pdf_text" not in st.session_state:
+    st.session_state.pdf_text = ""
+
+if "pdf_name" not in st.session_state:
+    st.session_state.pdf_name = ""  
 
 # =====================================================
 # Sidebar
@@ -69,6 +81,49 @@ with st.sidebar:
         st.rerun()
 
     st.success(f"Current Mode:\n\n{selected_mode}")
+    st.divider()
+
+st.subheader("📄 Study Material")
+
+uploaded_file = st.file_uploader(
+    "Upload PDF",
+    type=["pdf"]
+)
+
+if uploaded_file is not None:
+
+    if uploaded_file.name != st.session_state.pdf_name:
+
+        with st.spinner("Reading PDF..."):
+
+            pdf_text = extract_text_from_pdf(uploaded_file)
+
+            st.session_state.pdf_text = pdf_text
+
+            st.session_state.pdf_name = uploaded_file.name
+
+    st.success("✅ PDF Loaded")
+
+    st.write(f"**File:** {uploaded_file.name}")
+
+    st.caption(
+        f"Characters: {len(st.session_state.pdf_text)}"
+    )
+    # =====================================================
+# Notes Generator
+# =====================================================
+
+st.divider()
+
+if st.button("📝 Generate Notes", use_container_width=True):
+
+    if st.session_state.pdf_text == "":
+
+        st.warning("Please upload a PDF first.")
+
+    else:
+
+        st.session_state.generate_notes = True
 
     st.divider()
 
@@ -164,6 +219,27 @@ if user_prompt:
 
     conversation = system_prompt + "\n\n"
 
+    # Add uploaded PDF (if available)
+
+    if st.session_state.pdf_text != "":
+
+        conversation += """
+The user has uploaded study material.
+
+Instructions:
+- Use the uploaded study material as your primary source.
+- Answer using the uploaded document whenever possible.
+- If the answer is not available in the uploaded document, clearly mention that before using your own knowledge.
+- If the user asks for summaries, notes, formulas, important questions, viva questions, MCQs or explanations, generate them from the uploaded study material first.
+
+Study Material:
+
+"""
+
+        conversation += st.session_state.pdf_text + "\n\n"
+
+    # Add previous chat history
+
     for msg in st.session_state.messages:
 
         if msg["role"] == "user":
@@ -182,45 +258,66 @@ if user_prompt:
 
     with st.chat_message("assistant"):
 
-          message_placeholder = st.empty()
+        message_placeholder = st.empty()
 
-    full_response = ""
+        full_response = ""
 
-    with st.spinner("Thinking..."):
+        with st.spinner("Thinking..."):
 
-        try:
+            max_retries = 3
 
-            stream = client.models.generate_content_stream(
-                model="gemini-2.5-flash",
-                contents=conversation
-            )
+            for attempt in range(max_retries):
 
-            for chunk in stream:
+                try:
 
-                if hasattr(chunk, "text") and chunk.text:
-
-                    full_response += chunk.text
-
-                    message_placeholder.markdown(
-                        full_response + "▌"
+                    stream = client.models.generate_content_stream(
+                        model="gemini-2.5-flash",
+                        contents=conversation
                     )
 
-        except Exception as e:
+                    for chunk in stream:
 
-            full_response = (
-                "❌ Sorry, I couldn't generate a response right now.\n\n"
-                f"Error: {e}"
-            )
+                        if hasattr(chunk, "text") and chunk.text:
 
-            message_placeholder.markdown(full_response)
+                            full_response += chunk.text
 
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": full_response
-        }
-    )
-            # ---------------------------------------------
+                            message_placeholder.markdown(
+                                full_response + "▌"
+                            )
+
+                    message_placeholder.markdown(full_response)
+
+                    break
+
+                except Exception as e:
+
+                    error_message = str(e)
+
+                    if (
+                        "503" in error_message
+                        or "UNAVAILABLE" in error_message
+                    ):
+
+                        if attempt < max_retries - 1:
+
+                            message_placeholder.info(
+                                f"🔄 Server busy... Retrying ({attempt + 1}/{max_retries})"
+                            )
+
+                            time.sleep(2)
+
+                            continue
+
+                    full_response = (
+                        "❌ Sorry, I couldn't generate a response.\n\n"
+                        f"Error: {e}"
+                    )
+
+                    message_placeholder.markdown(full_response)
+
+                    break
+
+    # ---------------------------------------------
     # Save AI Response
     # ---------------------------------------------
 
@@ -276,6 +373,37 @@ Choose a subject from the sidebar and start learning.
 - Ask anything you'd like.
 """
     )
+# =====================================================
+# Automatic Notes
+# =====================================================
+
+if st.session_state.generate_notes:
+
+    st.header("📝 Automatic Notes")
+
+    with st.spinner("Generating notes..."):
+
+        notes_prompt = build_notes_prompt(
+            st.session_state.pdf_text
+        )
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=notes_prompt
+        )
+
+        notes = response.text
+
+    st.markdown(notes)
+
+    st.download_button(
+        "⬇ Download Notes",
+        notes,
+        file_name="MBA_Notes.txt",
+        mime="text/plain"
+    )
+
+    st.session_state.generate_notes = False
 
 # =====================================================
 # Footer
