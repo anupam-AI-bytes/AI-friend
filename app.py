@@ -158,31 +158,30 @@ if st.button("📚 Generate MCQs", use_container_width=True):
                 st.session_state.pdf_text
             )
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
-            )
+            try:
 
-try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt
+                )
 
-    # Parse JSON returned by Gemini
-    quiz_json = parse_gemini_json(response.text)
+                # Parse JSON returned by Gemini
+                quiz_json = parse_gemini_json(response.text)
 
-    # Save quiz data
-    st.session_state.quiz_data = quiz_json
+                # Save quiz data
+                st.session_state.quiz_data = quiz_json
+                st.session_state.quiz_submitted = False
+                st.session_state.generated_mcqs = response.text
 
-    st.session_state.quiz_submitted = False
+                st.success("✅ Interactive quiz generated successfully!")
 
-    # Keep text version for now
-    st.session_state.generated_mcqs = response.text
+            except Exception as e:
 
-    st.success("✅ Interactive quiz generated successfully!")
+                st.error(f"❌ Error: {e}")
 
-except Exception:
-
-    st.error(
-        "❌ The AI returned an unexpected format. Please click 'Generate MCQs' again."
-    )
+                if "response" in locals():
+                    st.subheader("Gemini Response")
+                    st.code(response.text)
 
 
 if st.button("🗑 Clear Chat", use_container_width=True):
