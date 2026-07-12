@@ -163,17 +163,26 @@ if st.button("📚 Generate MCQs", use_container_width=True):
                 contents=prompt
             )
 
-            # Parse JSON returned by Gemini
-            quiz_json = parse_gemini_json(response.text)
-            
-            st.session_state.quiz_submitted = False
+try:
 
-            st.session_state.quiz_data = quiz_json
+    # Parse JSON returned by Gemini
+    quiz_json = parse_gemini_json(response.text)
 
-            # Keep text version for now
-            st.session_state.generated_mcqs = response.text
+    # Save quiz data
+    st.session_state.quiz_data = quiz_json
 
-        st.success("✅ Interactive quiz generated successfully!")
+    st.session_state.quiz_submitted = False
+
+    # Keep text version for now
+    st.session_state.generated_mcqs = response.text
+
+    st.success("✅ Interactive quiz generated successfully!")
+
+except Exception:
+
+    st.error(
+        "❌ The AI returned an unexpected format. Please click 'Generate MCQs' again."
+    )
 
 
 if st.button("🗑 Clear Chat", use_container_width=True):

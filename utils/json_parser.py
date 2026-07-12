@@ -1,24 +1,24 @@
 import json
+import re
 
 
 def parse_gemini_json(text):
     """
-    Cleans Gemini's response and converts it into Python objects.
+    Extracts the JSON array from Gemini's response
+    and converts it into Python objects.
     """
 
-    # Remove markdown code fences if present
+    # Remove markdown code fences
+    text = text.replace("```json", "")
+    text = text.replace("```", "")
+    text = text.strip()
 
-    cleaned = text.strip()
+    # Find the first JSON array
+    match = re.search(r"\[.*\]", text, re.DOTALL)
 
-    if cleaned.startswith("```json"):
-        cleaned = cleaned.replace("```json", "", 1)
+    if not match:
+        raise ValueError("No JSON array found in Gemini response.")
 
-    if cleaned.startswith("```"):
-        cleaned = cleaned.replace("```", "", 1)
+    json_text = match.group(0)
 
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3]
-
-    cleaned = cleaned.strip()
-
-    return json.loads(cleaned)
+    return json.loads(json_text)
