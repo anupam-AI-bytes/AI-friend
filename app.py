@@ -1,5 +1,7 @@
 import os
 import time
+import json
+from utils.json_parser import parse_gemini_json
 from utils.notes_generator import build_notes_prompt
 from utils.mcq_generator import build_mcq_prompt
 import streamlit as st
@@ -44,6 +46,12 @@ if "study_mode" not in st.session_state:
 
 if "generated_mcqs" not in st.session_state:
     st.session_state.generated_mcqs = ""
+
+if "quiz_data" not in st.session_state:
+    st.session_state.quiz_data = []
+
+if "quiz_submitted" not in st.session_state:
+    st.session_state.quiz_submitted = False
     
 if "generate_notes" not in st.session_state:
     st.session_state.generate_notes = False
@@ -132,6 +140,9 @@ if st.button("📝 Generate Notes", use_container_width=True):
         st.session_state.generate_notes = True
 
     st.divider()
+# =====================================================
+# Generate MCQs
+# =====================================================
 
 if st.button("📚 Generate MCQs", use_container_width=True):
 
@@ -152,21 +163,29 @@ if st.button("📚 Generate MCQs", use_container_width=True):
                 contents=prompt
             )
 
+            # Parse JSON returned by Gemini
+            quiz_json = parse_gemini_json(response.text)
+            
+            st.session_state.quiz_submitted = False
+
+            st.session_state.quiz_data = quiz_json
+
+            # Keep text version for now
             st.session_state.generated_mcqs = response.text
 
-        st.success("✅ MCQs generated successfully!")
+        st.success("✅ Interactive quiz generated successfully!")
 
-    if st.button("🗑 Clear Chat", use_container_width=True):
+
+if st.button("🗑 Clear Chat", use_container_width=True):
 
         st.session_state.messages = []
 
         st.rerun()
+st.divider()
 
-    st.divider()
+st.markdown("### ✨ What this tutor can do")
 
-    st.markdown("### ✨ What this tutor can do")
-
-    st.markdown("""
+st.markdown("""
 - 📖 Explain concepts
 
 - 📝 Help with assignments
@@ -434,16 +453,70 @@ if st.session_state.generate_notes:
 
     st.session_state.generate_notes = False
 # =====================================================
-# Display Generated MCQs
+# Interactive Quiz
 # =====================================================
 
-if st.session_state.generated_mcqs != "":
+if len(st.session_state.quiz_data) > 0:
 
     st.divider()
 
-    st.subheader("📚 AI Generated MCQs")
+    st.subheader("📚 Interactive Quiz")
 
-    st.markdown(st.session_state.generated_mcqs)
+    score = 0
+
+    user_answers = []
+
+    for i, question in enumerate(st.session_state.quiz_data):
+
+        st.markdown(f"### Question {i+1}")
+
+        st.write(question["question"])
+
+        selected = st.radio(
+            "Choose your answer:",
+            question["options"],
+            key=f"quiz_{i}"
+        )
+
+        user_answers.append(selected)
+
+        if st.session_state.quiz_submitted:
+
+            correct_option = question["options"][question["answer"]]
+
+            if selected == correct_option:
+
+                st.success("✅ Correct")
+
+                score += 1
+
+            else:
+
+                st.error(f"❌ Correct Answer: {correct_option}")
+
+            st.info(
+                f"📖 Explanation:\n\n{question['explanation']}"
+            )
+
+        st.divider()
+
+    # ---------------------------------------
+    # Submit Button
+    # ---------------------------------------
+
+    if not st.session_state.quiz_submitted:
+
+        if st.button("✅ Submit Quiz"):
+
+            st.session_state.quiz_submitted = True
+
+            st.rerun()
+
+    else:
+
+        st.success(
+            f"🎉 Your Score: {score}/{len(st.session_state.quiz_data)}"
+        )
 
 # =====================================================
 # Footer
